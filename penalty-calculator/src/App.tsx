@@ -1,7 +1,7 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useRef } from "react";
 
 export default function PenaltyCalculator() {
-  const [loanStart, setLoanStart] = useState<string>("");
+  const [loanStartDisplay, setLoanStartDisplay] = useState<string>(""); // DD/MM/YYYY
   const [duesCleared, setDuesCleared] = useState<string>("");
   const [clearingToday, setClearingToday] = useState<string>("");
   const [penaltyRate, setPenaltyRate] = useState<string>("5");
@@ -10,22 +10,60 @@ export default function PenaltyCalculator() {
     totalPenalty: number;
   }>(null);
 
+  const datePickerRef = useRef<HTMLInputElement | null>(null);
+
+  function displayToISO(display: string): string {
+    // DD/MM/YYYY -> YYYY-MM-DD
+    const digits = display.replace(/[^0-9]/g, "");
+    if (digits.length !== 8) return "";
+    const dd = digits.slice(0, 2);
+    const mm = digits.slice(2, 4);
+    const yyyy = digits.slice(4, 8);
+    return `${yyyy}-${mm}-${dd}`;
+  }
+
+  function isoToDisplay(iso: string): string {
+    // YYYY-MM-DD -> DD/MM/YYYY
+    const m = iso.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+    if (!m) return "";
+    return `${m[3]}/${m[2]}/${m[1]}`;
+  }
+
+  function parseDisplayToDate(display: string): Date | null {
+    const iso = displayToISO(display);
+    if (!iso) return null;
+    const d = new Date(iso);
+    return isNaN(+d) ? null : d;
+  }
+
+  function formatDisplayInput(raw: string): string {
+    // Keep digits, insert slashes after 2 and 4, clamp length to 10
+    const digits = raw.replace(/[^0-9]/g, "").slice(0, 8);
+    const parts = [digits.slice(0, 2), digits.slice(2, 4), digits.slice(4, 8)].filter(Boolean);
+    return parts.join("/");
+  }
+
+  function handleLoanStartChange(value: string) {
+    const formatted = formatDisplayInput(value);
+    setLoanStartDisplay(formatted);
+  }
+
   function calculatePenalty() {
     const duesClearedNum = Number(duesCleared || 0);
     const clearingTodayNum = Number(clearingToday || 0);
     const penaltyRateNum = Number(penaltyRate || 0);
 
-    if (!loanStart || clearingTodayNum <= 0) {
-      alert("Enter loan start date and number of dues being cleared today!");
+    const startDate = parseDisplayToDate(loanStartDisplay);
+
+    if (!startDate || clearingTodayNum <= 0) {
+      alert("Enter a valid start date and number of dues being cleared today!");
       return;
     }
 
-    const startDate = new Date(loanStart);
     const today = new Date();
 
     const allDues: Date[] = [];
     const checkDate = new Date(startDate);
-    // Move to the first monthly due date after start
     while (true) {
       checkDate.setMonth(checkDate.getMonth() + 1);
       if (checkDate <= today) {
@@ -60,14 +98,15 @@ export default function PenaltyCalculator() {
     setResult({ penalties, totalPenalty });
   }
 
-useEffect (() => {
-if(loanStart!=='' && duesCleared!=='' && clearingToday!==''){
-  calculatePenalty()
-}
-}, [loanStart, duesCleared, clearingToday , penaltyRate])
+  useEffect(() => {
+    if (loanStartDisplay !== "" && duesCleared !== "" && clearingToday !== "") {
+      calculatePenalty();
+    }
+  }, [loanStartDisplay, duesCleared, clearingToday, penaltyRate]);
+
   const headerBarStyle: React.CSSProperties = {
     width: "100%",
-    background: "#FAFAFA",
+    background: "#FAF9F6",
     color: "#16a34a",
     padding: "14px 16px",
     fontWeight: 800,
@@ -104,7 +143,7 @@ if(loanStart!=='' && duesCleared!=='' && clearingToday!==''){
     <div
       style={{
         minHeight: "100svh",
-        background: "#FAFAFA",
+        background: "#FAF9F6",
       }}
     >
       <div style={headerBarStyle}>wisebook.</div>
@@ -118,8 +157,6 @@ if(loanStart!=='' && duesCleared!=='' && clearingToday!==''){
         }}
       >
         <div style={cardStyle}>
-        
-
           <h2 style={{ textAlign: "center", color: "#0f172a", margin: "6px 0 14px" }}>
             Penalty Calculator
           </h2>
@@ -127,12 +164,50 @@ if(loanStart!=='' && duesCleared!=='' && clearingToday!==''){
           <div style={sectionStyle}>
             <div>
               <label style={labelStyle}>Loan Start Date</label>
-              <input
-                type="date"
-                value={loanStart}
-                onChange={(e) => setLoanStart(e.target.value)}
-                style={inputStyle}
-              />
+              <div style={{ position: "relative" }}>
+                <input
+                  type="text"
+                  inputMode="numeric"
+                  placeholder="DD/MM/YYYY"
+                  value={loanStartDisplay}
+                  onChange={(e) => handleLoanStartChange(e.target.value)}
+                  style={{ ...inputStyle, paddingRight: 48 }}
+                />
+                <button
+                  type="button"
+                  aria-label="Open calendar"
+                  onClick={() => {
+                    const el = datePickerRef.current;
+                    if (el && (el as any).showPicker) {
+                      try { (el as any).showPicker(); } catch { el.click(); }
+                    } else if (el) {
+                      el.click();
+                    }
+                  }}
+                  style={{
+                    position: "absolute",
+                    right: 8,
+                    top: "50%",
+                    transform: "translateY(-50%)",
+                    background: "transparent",
+                    border: "none",
+                    padding: 6,
+                    cursor: "pointer",
+                    color: "#334155",
+                    fontSize: 18,
+                  }}
+                >
+                  📅
+                </button>
+                <input
+                  ref={datePickerRef}
+                  type="date"
+                  value={displayToISO(loanStartDisplay)}
+                  onChange={(e) => setLoanStartDisplay(isoToDisplay(e.target.value))}
+                  style={{ position: "absolute", opacity: 0, pointerEvents: "none", width: 0, height: 0 }}
+                  tabIndex={-1}
+                />
+              </div>
             </div>
 
             <div>
@@ -174,7 +249,6 @@ if(loanStart!=='' && duesCleared!=='' && clearingToday!==''){
                 style={inputStyle}
               />
             </div>
-
           </div>
 
           {!result && (
